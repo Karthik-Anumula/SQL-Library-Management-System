@@ -1,0 +1,195 @@
+/* #1- How many copies of the book titled "The Lost Tribe" are owned by the library branch whose name is "Sharpstown"? */
+
+DELIMITER //
+CREATE PROCEDURE bookCopiesAtAllSharpstown (
+    IN bookTitle VARCHAR(70), 
+    IN branchName VARCHAR(70)
+)
+BEGIN
+    -- Handle default values within the procedure
+    IF bookTitle IS NULL THEN
+        SET bookTitle = 'The Lost Tribe';
+    END IF;
+    IF branchName IS NULL THEN
+        SET branchName = 'Sharpstown';
+    END IF;
+
+    SELECT 
+        copies.book_copies_BranchID AS 'Branch ID', 
+        branch.library_branch_BranchName AS 'Branch Name',
+        copies.book_copies_No_Of_Copies AS 'Number of Copies',
+        book.book_Title AS 'Book Title'
+    FROM 
+        tbl_book_copies AS copies
+    INNER JOIN 
+        tbl_book AS book ON copies.book_copies_BookID = book.book_BookID
+    INNER JOIN 
+        tbl_library_branch AS branch ON copies.book_copies_BranchID = branch.library_branch_BranchID
+    WHERE 
+        book.book_Title = bookTitle AND branch.library_branch_BranchName = branchName;
+END //
+DELIMITER ;
+
+call bookCopiesAtAllSharpstown('The Lost Tribe','Ann Arbor');
+call bookCopiesAtAllSharpstown('The Lost Tribe','Sharpstown');
+
+/*
+update tbl_book_copies
+set book_copies_No_Of_Copies = 4
+where book_copies_BranchID = (select library_branch_BranchID from tbl_library_branch where library_branch_BranchName='Sharpstown');
+*/
+
+
+
+/* #2- How many copies of the book titled "The Lost Tribe" are owned by each library branch? */
+
+DELIMITER //
+CREATE PROCEDURE bookCopiesAtAllBranches(
+    IN bookTitle VARCHAR(70)
+)
+BEGIN
+    -- Handle default values within the procedure
+    IF bookTitle IS NULL THEN
+        SET bookTitle = 'The Lost Tribe';
+    END IF;
+
+    SELECT 
+        copies.book_copies_BranchID AS 'Branch ID', 
+        branch.library_branch_BranchName AS 'Branch Name',
+        copies.book_copies_No_Of_Copies AS 'Number of Copies',
+        book.book_Title AS 'Book Title'
+    FROM 
+        tbl_book_copies AS copies
+    INNER JOIN 
+        tbl_book AS book ON copies.book_copies_BookID = book.book_BookID
+    INNER JOIN 
+        tbl_library_branch AS branch ON copies.book_copies_BranchID = branch.library_branch_BranchID
+    WHERE 
+        book.book_Title = bookTitle;
+END //
+DELIMITER ;
+select * from tbl_book;
+call bookCopiesAtAllBranches(NULL); -- default value of book title in the lost tribe
+call bookCopiesAtAllBranches('IT');
+
+
+/* #3- Retrieve the names of all borrowers who do not have any books checked out. */
+DELIMITER //
+
+CREATE PROCEDURE NoLoans()
+BEGIN
+    SELECT borrower_BorrowerName 
+    FROM tbl_borrower
+    WHERE NOT EXISTS (
+        SELECT 1 
+        FROM tbl_book_loans
+        WHERE tbl_book_loans.book_loans_CardNo = tbl_borrower.borrower_CardNo
+    );
+END //
+
+DELIMITER ;
+
+-- To execute the procedure
+
+CALL NoLoans();
+
+
+/* #4- For each book that is loaned out from the "Sharpstown" branch and whose DueDate is today, retrieve the book title, the borrower's name, and the borrower's address.  */
+
+DELIMITER //
+CREATE PROCEDURE LoanersInfo (
+    IN DueDate DATE,
+    IN LibraryBranchName VARCHAR(50)
+)
+BEGIN
+    -- Set default values if not provided
+    IF DueDate IS NULL THEN
+        SET DueDate = CURRENT_DATE;
+    END IF;
+    
+    -- Your SELECT statement
+    SELECT Branch.library_branch_BranchName AS 'Branch Name',
+           Book.book_Title AS 'Book Name',
+           Borrower.borrower_BorrowerName AS 'Borrower Name',
+           Borrower.borrower_BorrowerAddress AS 'Borrower Address',
+           Loans.book_loans_DateOut AS 'Date Out',
+           Loans.book_loans_DueDate AS 'Due Date'
+    FROM tbl_book_loans AS Loans
+    INNER JOIN tbl_book AS Book ON Loans.book_loans_BookID = Book.book_BookID
+    INNER JOIN tbl_borrower AS Borrower ON Loans.book_loans_CardNo = Borrower.borrower_CardNo
+    INNER JOIN tbl_library_branch AS Branch ON Loans.book_loans_BranchID = Branch.library_branch_BranchID
+    WHERE Loans.book_loans_DueDate = DueDate
+    AND Branch.library_branch_BranchName = LibraryBranchName;
+END //
+DELIMITER ;
+call LoanersInfo(NULL,NULL);
+call LoanersInfo('1/12/18','Central');
+
+/* #5- For each library branch, retrieve the branch name and the total number of books loaned out from that branch.  */
+DELIMITER //
+
+CREATE PROCEDURE TotalLoansPerBranch()
+BEGIN
+    SELECT Branch.library_branch_BranchName AS 'Branch Name',
+           COUNT(Loans.book_loans_BranchID) AS 'Total Loans'
+    FROM tbl_book_loans AS Loans
+    INNER JOIN tbl_library_branch AS Branch ON Loans.book_loans_BranchID = Branch.library_branch_BranchID
+    GROUP BY Branch.library_branch_BranchName;
+END //
+
+DELIMITER ;
+
+call TotalLoansPerBranch();
+
+/* #6- Retrieve the names, addresses, and number of books checked out for all borrowers who have more than five books checked out. */
+DELIMITER //
+
+CREATE PROCEDURE BooksLoanedOut (IN BooksCheckedOut INT)
+BEGIN
+	IF BooksCheckedOut IS NULL THEN
+		SET BooksCheckedOut=1;
+	END IF;
+    SELECT Borrower.borrower_BorrowerName AS 'Borrower Name',
+           Borrower.borrower_BorrowerAddress AS 'Borrower Address',
+           Borrower.borrower_BorrowerPhone AS 'Borrower Phone Number',
+           COUNT(Borrower.borrower_BorrowerName) AS 'Books Checked Out'
+    FROM tbl_book_loans AS Loans
+    INNER JOIN tbl_borrower AS Borrower ON Loans.book_loans_CardNo = Borrower.borrower_CardNo
+    GROUP BY Borrower.borrower_BorrowerName, Borrower.borrower_BorrowerAddress,Borrower.borrower_BorrowerPhone
+    HAVING COUNT(Borrower.borrower_BorrowerName) >= BooksCheckedOut;
+END //
+
+DELIMITER ;
+call BooksLoanedOut(NULL);
+call BooksLoanedOut(5);
+
+
+/* #7- For each book authored by "Stephen King", retrieve the title and the number of copies owned by the library branch whose name is "Central".*/
+
+DELIMITER //
+
+CREATE PROCEDURE BookbyAuthorandBranch (IN BranchName VARCHAR(50), IN AuthorName VARCHAR(50))
+BEGIN
+	IF BranchName IS NULL THEN
+		SET BranchName='Central';
+	END IF;
+    IF AuthorName IS NULL THEN
+		SET AuthorName='Stephen King';
+	END IF;
+    
+    SELECT Branch.library_branch_BranchName AS 'Branch Name',
+           Book.book_Title AS 'Title',
+           Copies.book_copies_No_Of_Copies AS 'Number of Copies'
+    FROM tbl_book_authors AS Authors
+    INNER JOIN tbl_book AS Book ON Authors.book_authors_BookID = Book.book_BookID
+    INNER JOIN tbl_book_copies AS Copies ON Authors.book_authors_BookID = Copies.book_copies_BookID
+    INNER JOIN tbl_library_branch AS Branch ON Copies.book_copies_BranchID = Branch.library_branch_BranchID
+    WHERE Branch.library_branch_BranchName = BranchName
+      AND Authors.book_authors_AuthorName = AuthorName;
+END //
+
+DELIMITER ;
+
+CALL BookbyAuthorandBranch(NULL,NULL);
+CALL BookbyAuthorandBranch('Sharpstown','William Goldman');
+CALL BookbyAuthorandBranch('Ann Arbor','Mark Lee');
